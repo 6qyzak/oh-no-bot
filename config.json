@@ -1,3 +1,9 @@
 {
-    "token": "oh no my secret token"
+    "token": "oh no my secret token",
+    "version": {
+        "api": 6,
+        "gateway": 6
+    },
+    "cache": {
+    }
 }

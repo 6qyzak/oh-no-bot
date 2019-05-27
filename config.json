@@ -3,7 +3,5 @@
     "version": {
         "api": 6,
         "gateway": 6
-    },
-    "cache": {
     }
 }

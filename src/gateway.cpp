@@ -146,6 +146,8 @@ gateway::gateway(ohno::config const& config)
     , m_session_limit_remaining(0)
     , m_session_limit_resets_after(0)
 {
+    BOOST_LOG_TRIVIAL(debug) << "getting gateway bot";
+
     auto response = request_get_discord_bot(config);
     m_url = response["url"];
     m_shard = response["shards"];
@@ -154,6 +156,15 @@ gateway::gateway(ohno::config const& config)
     m_session_limit_total = session_limit["total"];
     m_session_limit_remaining = session_limit["remaining"];
     m_session_limit_resets_after = session_limit["reset_after"];
+
+    BOOST_LOG_TRIVIAL(debug) << "got gateway bot";
+    BOOST_LOG_TRIVIAL(debug) << "gateway URL: " << get_url();
+    BOOST_LOG_TRIVIAL(debug) << "recommended shard: " << get_shard();
+    BOOST_LOG_TRIVIAL(debug) << "using shard: 1";
+    BOOST_LOG_TRIVIAL(debug) << "bot session limit: " << get_session_limit_total();
+    BOOST_LOG_TRIVIAL(debug) << "remaining bot session: " << get_session_limit_remaining();
+    BOOST_LOG_TRIVIAL(debug) << "time before bot session resets: " << get_session_limit_resets_after();
+
 }
 
 auto gateway::get_url() const noexcept -> std::string const&

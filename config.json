@@ -1,4 +1,8 @@
 {
+    "cache": {
+        "event_sequence": 0,
+        "session_id": ""
+    },
     "token": "oh no my secret token",
     "version": {
         "api": 6,

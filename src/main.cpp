@@ -1,12 +1,12 @@
 #include <iostream>
 #include <memory>
 
+#include <boost/bind.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/expressions.hpp>
 #include <nlohmann/json.hpp>
 
-#include "./config.h"
-#include "./gateway.h"
+#include "./bot.h"
 
 namespace
 {
@@ -25,6 +25,21 @@ auto init_logger() -> void
     (
         trivial::severity >= trivial::debug
     );
+}
+
+auto handle_signal(
+    boost::system::error_code const& error,
+    int const signal,
+    qyzk::ohno::bot& bot) -> void
+{
+    if (error)
+    {
+        BOOST_LOG_TRIVIAL(error) << "error occured during waiting signal: " << error.message();
+        return;
+    }
+
+    BOOST_LOG_TRIVIAL(debug) << "signal caught, stopping bot";
+    bot.stop();
 }
 
 } // namespace
@@ -70,26 +85,33 @@ auto main(
     BOOST_LOG_TRIVIAL(debug) << "using Discord API version " << config.get_api_version();
     BOOST_LOG_TRIVIAL(debug) << "using Discord Gateway version " << config.get_gateway_version();
 
-    BOOST_LOG_TRIVIAL(debug) << "getting gateway URL";
-    std::unique_ptr< qyzk::ohno::gateway > gateway_p;
+    boost::asio::io_context context_io;
+
+    std::unique_ptr< qyzk::ohno::bot > bot_p;
     try
     {
-        gateway_p.reset(new qyzk::ohno::gateway(config));
+        bot_p.reset(new qyzk::ohno::bot(context_io, config));
     }
     catch (std::exception const& error)
     {
-        BOOST_LOG_TRIVIAL(error) << "failed to get gateway bot: " << error.what();
+        BOOST_LOG_TRIVIAL(error) << "failed to initialize bot: " << error.what();
         return EXIT_FAILURE;
     }
 
-    auto& gateway = *gateway_p;
-    BOOST_LOG_TRIVIAL(debug) << "got gateway bot";
-    BOOST_LOG_TRIVIAL(debug) << "gateway URL: " << gateway.get_url();
-    BOOST_LOG_TRIVIAL(debug) << "recommended shard: " << gateway.get_shard();
-    BOOST_LOG_TRIVIAL(debug) << "using shard: 1";
-    BOOST_LOG_TRIVIAL(debug) << "bot session limit: " << gateway.get_session_limit_total();
-    BOOST_LOG_TRIVIAL(debug) << "remaining bot session: " << gateway.get_session_limit_remaining();
-    BOOST_LOG_TRIVIAL(debug) << "time before bot session resets: " << gateway.get_session_limit_resets_after();
+    auto& bot = *bot_p;
 
+    boost::asio::signal_set signals(context_io, SIGINT, SIGTERM);
+    signals.async_wait(
+        boost::bind(
+            handle_signal,
+            boost::asio::placeholders::error,
+            boost::asio::placeholders::signal_number,
+            std::ref(bot)));
+
+    bot.connect();
+    bot.async_listen_event();
+    context_io.run();
+    bot.disconnect();
+    BOOST_LOG_TRIVIAL(debug) << "stopped bot";
     return EXIT_SUCCESS;
 }

@@ -51,7 +51,7 @@ auto secure_request_get(
     stream.handshake(ssl::stream_base::client, error);
     if (error)
     {
-        BOOST_LOG_TRIVIAL(error) << "failed to SSL handshake: " << error.message();
+        BOOST_LOG_TRIVIAL(error) << "failed to do SSL handshake: " << error.message();
         get_lowest_layer(stream).socket().close(error);
         throw gateway_error();
     }

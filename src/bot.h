@@ -1,6 +1,8 @@
 #ifndef __QYZK_OHNO_BOT_H__
 #define __QYZK_OHNO_BOT_H__
 
+#include <chrono>
+
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast.hpp>
@@ -18,6 +20,11 @@ public:
     using websocket_stream_type = boost::beast::websocket::stream<
         boost::beast::ssl_stream<
             boost::beast::tcp_stream >>;
+    using hosts_type = decltype(
+        std::declval<boost::asio::ip::tcp::resolver>().
+            resolve(
+                std::declval<std::string>(),
+                std::declval<std::string>()));
 
     bot(boost::asio::io_context& context_io, ohno::config& config);
     auto connect(void) -> void;
@@ -39,6 +46,11 @@ public:
     auto is_resuming(void) const noexcept -> bool;
     auto start_resuming(void) noexcept -> void;
     auto stop_resuming(void) noexcept -> void;
+    auto get_discord_http_hosts(void) noexcept -> hosts_type&;
+    auto get_io_context(void) noexcept -> boost::asio::io_context&;
+    auto get_ssl_context(void) noexcept -> boost::asio::ssl::context&;
+    auto reset_ko3_timeout(void) noexcept -> void;
+    auto is_ko3_timedout(void) noexcept -> bool;
 
 private:
     ohno::config& m_config;
@@ -52,6 +64,8 @@ private:
     uint32_t m_sequence_event;
     bool m_is_running;
     bool m_is_resuming;
+    hosts_type m_hosts_discord_http;
+    std::chrono::system_clock::time_point m_ko3_timeout;
 };
 
 } // namespace qyzk::ohno

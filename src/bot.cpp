@@ -9,6 +9,84 @@ using namespace boost::beast;
 namespace
 {
 
+auto http_post(
+    qyzk::ohno::bot& bot,
+    std::string const& target,
+    nlohmann::json const& body)
+    -> nlohmann::json
+{
+    ssl_stream< tcp_stream > stream(bot.get_io_context(), bot.get_ssl_context());
+    nlohmann::json response_json;
+
+    error_code error;
+    get_lowest_layer(stream).connect(bot.get_discord_http_hosts(), error);
+    if (error)
+    {
+        BOOST_LOG_TRIVIAL(error) << "failed to connect to Discord HTTP host: " << error.message();
+        return response_json;
+    }
+
+    stream.handshake(ssl::stream_base::client, error);
+    if (error)
+    {
+        BOOST_LOG_TRIVIAL(error) << "failed to do SSL handshake: " << error.message();
+        get_lowest_layer(stream).socket().close(error);
+        return response_json;
+    }
+
+    auto const& config = bot.get_config();
+
+    std::string request_string = body.dump();
+
+    http::request< http::string_body > request { http::verb::post, target, 11, };
+    request.set(http::field::host, config.get_discord_hostname());
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::authorization, "Bot " + config.get_token());
+    request.set(http::field::content_type, "application/json");
+    request.set(http::field::content_length, request_string.size());
+    request.body() = request_string;
+
+    http::write(stream, request, error);
+    if (error)
+    {
+        BOOST_LOG_TRIVIAL(error) << "failed to send HTTP request: " << error.message();
+    }
+
+    else
+    {
+        flat_buffer buffer;
+        http::response< http::string_body > response;
+        http::read(stream, buffer, response, error);
+        if (error)
+        {
+            BOOST_LOG_TRIVIAL(error) << "failed to receive HTTP response: " << error.message();
+        }
+        else
+        {
+            /*
+            try
+            {
+                response_json = nlohmann::json::parse(response.body());
+            }
+            catch (std::exception const& error)
+            {
+                BOOST_LOG_TRIVIAL(error) << "failed to parse HTTP response body: " << error.what();
+                BOOST_LOG_TRIVIAL(error) << response.body();
+            }
+            */
+            if (response.result() != http::status::ok)
+                BOOST_LOG_TRIVIAL(warning) << "http response result is not ok" << response.body();
+        }
+    }
+
+    stream.shutdown(error);
+    if (error && error != ssl::error::stream_truncated)
+        BOOST_LOG_TRIVIAL(warning) << "connection has been closed ungracefully: " << error.message();
+    get_lowest_layer(stream).socket().close(error);
+
+    return response_json;
+}
+
 auto handle_websocket_close(error_code const& error) -> void
 {
     if (error)
@@ -130,15 +208,31 @@ auto resume(
     bot.get_websocket().write(boost::asio::buffer(payload.dump()), error);
 }
 
+auto send_message(
+    qyzk::ohno::bot& bot,
+    std::string const& channel_id,
+    std::string const& message)
+{
+    nlohmann::json request;
+    request["content"] = message;
+    request["tts"] = false;
+    http_post(
+        bot,
+        std::string("/api/v") + std::to_string(bot.get_config().get_api_version()) + "/channels/" + channel_id + "/messages",
+        request);
+}
+
 auto handle_message(qyzk::ohno::bot& bot, nlohmann::json const& payload) -> void
 {
     auto const message = payload["d"];
-    auto const content = message["content"];
-    auto const user = message["author"]["id"];
+    std::string const content = message["content"];
+    std::string const user = message["author"]["id"];
+    std::string const channel_id = message["channel_id"];
 
-    if (user == "257451263820562433")
+    if (bot.is_ko3_timedout() && user == "305519394656878595")
     {
-        auto const channel_id = message["channel_id"];
+        bot.reset_ko3_timeout();
+        send_message(bot, channel_id, "으아아악 고3이다");
     }
 }
 
@@ -291,6 +385,8 @@ bot::bot(io_context& context_io, ohno::config& config)
     , m_timer_heartbeat(m_context_io)
     , m_is_running(false)
     , m_is_resuming(false)
+    , m_hosts_discord_http()
+    , m_ko3_timeout()
 {
 }
 
@@ -302,6 +398,14 @@ auto bot::connect(void) -> void
 
     error_code error;
     ip::tcp::resolver resolver(m_context_io);
+
+    m_hosts_discord_http = resolver.resolve(m_config.get_discord_hostname(), "https", error);
+    if (error)
+    {
+        BOOST_LOG_TRIVIAL(error) << "failed to resolve Discord HTTP server: " << error.message();
+        return;
+    }
+
     auto hosts = resolver.resolve(hostname, "https", error);
     if (error)
     {
@@ -330,6 +434,7 @@ auto bot::connect(void) -> void
     }
 
     m_is_running = true;
+    reset_ko3_timeout();
 
     BOOST_LOG_TRIVIAL(debug) << "connected to Discord gateway";
 }
@@ -477,6 +582,33 @@ auto bot::start_resuming(void) noexcept -> void
 auto bot::stop_resuming(void) noexcept -> void
 {
     m_is_resuming = false;;
+}
+
+auto bot::get_discord_http_hosts(void) noexcept -> hosts_type&
+{
+    return m_hosts_discord_http;
+}
+
+auto bot::get_io_context(void) noexcept -> boost::asio::io_context&
+{
+    return m_context_io;
+}
+
+auto bot::get_ssl_context(void) noexcept -> boost::asio::ssl::context&
+{
+    return m_context_ssl;
+}
+
+auto bot::reset_ko3_timeout(void) noexcept -> void
+{
+    m_ko3_timeout = std::chrono::system_clock::now();
+}
+
+auto bot::is_ko3_timedout(void) noexcept -> bool
+{
+    if (std::chrono::system_clock::now() - m_ko3_timeout >= std::chrono::seconds(30))
+        return true;
+    return false;
 }
 
 } // namespace qyzk::ohno

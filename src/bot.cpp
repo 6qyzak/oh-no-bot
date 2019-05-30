@@ -58,25 +58,9 @@ auto http_post(
         http::response< http::string_body > response;
         http::read(stream, buffer, response, error);
         if (error)
-        {
             BOOST_LOG_TRIVIAL(error) << "failed to receive HTTP response: " << error.message();
-        }
-        else
-        {
-            /*
-            try
-            {
-                response_json = nlohmann::json::parse(response.body());
-            }
-            catch (std::exception const& error)
-            {
-                BOOST_LOG_TRIVIAL(error) << "failed to parse HTTP response body: " << error.what();
-                BOOST_LOG_TRIVIAL(error) << response.body();
-            }
-            */
-            if (response.result() != http::status::ok)
-                BOOST_LOG_TRIVIAL(warning) << "http response result is not ok" << response.body();
-        }
+        else if (response.result() != http::status::ok)
+            BOOST_LOG_TRIVIAL(warning) << "http response result is not ok: " << response.body();
     }
 
     stream.shutdown(error);
@@ -91,7 +75,12 @@ auto handle_websocket_close(error_code const& error) -> void
 {
     if (error)
     {
-        BOOST_LOG_TRIVIAL(warning) << "error occured during closing websocket: " << error.message();
+        if (error == ssl::error::stream_truncated)
+            BOOST_LOG_TRIVIAL(debug) << "Discord gateway has closed websocket stream";
+        else if (error == boost::asio::error::operation_aborted)
+            BOOST_LOG_TRIVIAL(debug) << "WebSocket close operation has been aborted";
+        else
+            BOOST_LOG_TRIVIAL(warning) << "error occured during closing websocket operation: " << error.message();
     }
     BOOST_LOG_TRIVIAL(debug) << "closed websocket";
 }
@@ -133,13 +122,23 @@ auto heartbeat(qyzk::ohno::bot& bot, error_code const& error) -> void
 {
     if (error)
     {
-        BOOST_LOG_TRIVIAL(error) << "error occured waiting async timer: " << error.message();
-        bot.stop();
-        return;
+        if (error == boost::asio::error::operation_aborted)
+        {
+            BOOST_LOG_TRIVIAL(debug) << "heartbeat timer operation has been aborted";
+            bot.stop(false);
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(error) << "error occured during heartbeat timer operation: " << error.message();
+            bot.stop(true);
+        }
     }
 
     if (!bot.is_running())
+    {
+        BOOST_LOG_TRIVIAL(debug) << "bot is not running not starting heartbeat operation";
         return;
+    }
 
     bot.beat();
 
@@ -290,8 +289,22 @@ auto handle_event(
 {
     if (error)
     {
-        BOOST_LOG_TRIVIAL(error) << "error occured async read on websocket: " << error.message();
-        bot.stop();
+        bool restart = false;
+        if (error == boost::asio::error::operation_aborted)
+        {
+            BOOST_LOG_TRIVIAL(debug) << "listening Discord gateway event operation has been aborted";
+        }
+        else if (error == ssl::error::stream_truncated)
+        {
+            BOOST_LOG_TRIVIAL(debug) << "listening Discord gateway event failed due to disconnection by Discord gateway";
+            restart = true;
+        }
+        else
+        {
+            BOOST_LOG_TRIVIAL(error) << "error occured during listening Discord gateway event operation: " << error.message();
+            restart = true;
+        }
+        bot.stop(restart);
         return;
     }
 
@@ -341,7 +354,7 @@ auto handle_event(
         if (error_write)
         {
             BOOST_LOG_TRIVIAL(error) << "failed to start bot session: " << error_write.message();
-            bot.stop();
+            bot.stop(true);
         }
         break;
 
@@ -356,7 +369,7 @@ auto handle_event(
         if (error_write)
         {
             BOOST_LOG_TRIVIAL(error) << "failed to start bot session: " << error_write.message();
-            bot.stop();
+            bot.stop(true);
         }
         break;
 
@@ -387,6 +400,7 @@ bot::bot(io_context& context_io, ohno::config& config)
     , m_is_resuming(false)
     , m_hosts_discord_http()
     , m_ko3_timeout()
+    , m_should_restart(true)
 {
 }
 
@@ -444,6 +458,7 @@ auto bot::disconnect(void) -> void
     BOOST_LOG_TRIVIAL(debug) << "disconnecting from Discord gateway";
 
     error_code error;
+    m_websocket.close(websocket::close_code::none, error);
     m_websocket.next_layer().shutdown(error);
     if (error && ssl::error::stream_truncated)
     {
@@ -458,27 +473,6 @@ auto bot::disconnect(void) -> void
     BOOST_LOG_TRIVIAL(debug) << "disconnected from Discord gateway";
 
     m_heartbeat_interval = 0;
-}
-
-auto bot::async_start_heartbeat(boost::system::error_code const& error) -> void
-{
-    if (error)
-    {
-        BOOST_LOG_TRIVIAL(error) << "timer error: " << error.message();
-        BOOST_LOG_TRIVIAL(error) << "stopped heartbeating";
-    }
-
-    else
-    {
-        beat();
-        m_timer_heartbeat.expires_at(
-            m_timer_heartbeat.expiry() + chrono::milliseconds(m_heartbeat_interval));
-        m_timer_heartbeat.async_wait(
-            boost::bind(
-                &bot::async_start_heartbeat,
-                this,
-                boost::asio::placeholders::error));
-    }
 }
 
 auto bot::beat(void) -> void
@@ -497,7 +491,7 @@ auto bot::beat(void) -> void
     if (error)
     {
         BOOST_LOG_TRIVIAL(error) << "failed to send heartbeat ping: " << error.message();
-        stop();
+        stop(true);
     }
 
     BOOST_LOG_TRIVIAL(debug) << "sent heartbeating";
@@ -534,17 +528,16 @@ auto bot::is_running() const noexcept -> bool
     return m_is_running;
 }
 
-auto bot::stop(void) noexcept -> void
+auto bot::stop(bool const should_restart) noexcept -> void
 {
     if (!m_is_running)
         return;
 
+    m_should_restart = should_restart;
+
     error_code error;
     m_timer_heartbeat.cancel(error);
-    if (error)
-        BOOST_LOG_TRIVIAL(error) << "failed to cancel heartbeat timer";
-
-    m_websocket.async_close(websocket::close_code::none, handle_websocket_close);
+    get_lowest_layer(m_websocket).socket().cancel(error);
 
     m_is_running = false;
 }
@@ -609,6 +602,11 @@ auto bot::is_ko3_timedout(void) noexcept -> bool
     if (std::chrono::system_clock::now() - m_ko3_timeout >= std::chrono::seconds(30))
         return true;
     return false;
+}
+
+auto bot::should_restart(void) const noexcept -> bool
+{
+    return m_should_restart;
 }
 
 } // namespace qyzk::ohno

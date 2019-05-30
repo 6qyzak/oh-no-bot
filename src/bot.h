@@ -29,14 +29,13 @@ public:
     bot(boost::asio::io_context& context_io, ohno::config& config);
     auto connect(void) -> void;
     auto disconnect(void) -> void;
-    auto async_start_heartbeat(boost::system::error_code const& error) -> void;
     auto beat(void) -> void;
     auto async_listen_event(void) -> void;
     auto get_heartbeat_timer(void) noexcept -> boost::asio::steady_timer&;
     auto get_heartbeat_interval(void) const noexcept -> uint32_t;
     auto set_heartbeat_interval(uint32_t const interval) noexcept -> void;
     auto is_running(void) const noexcept -> bool;
-    auto stop(void) noexcept -> void;
+    auto stop(bool const should_restart) noexcept -> void;
     auto get_websocket_buffer(void) noexcept -> boost::beast::flat_buffer&;
     auto get_websocket(void) noexcept -> websocket_stream_type&;
     auto get_config(void) const noexcept -> ohno::config const&;
@@ -51,6 +50,7 @@ public:
     auto get_ssl_context(void) noexcept -> boost::asio::ssl::context&;
     auto reset_ko3_timeout(void) noexcept -> void;
     auto is_ko3_timedout(void) noexcept -> bool;
+    auto should_restart(void) const noexcept -> bool;
 
 private:
     ohno::config& m_config;
@@ -66,6 +66,7 @@ private:
     bool m_is_resuming;
     hosts_type m_hosts_discord_http;
     std::chrono::system_clock::time_point m_ko3_timeout;
+    bool m_should_restart;
 };
 
 } // namespace qyzk::ohno

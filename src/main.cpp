@@ -39,7 +39,7 @@ auto handle_signal(
     }
 
     BOOST_LOG_TRIVIAL(debug) << "signal caught, stopping bot";
-    bot.stop();
+    bot.stop(false);
 }
 
 } // namespace
@@ -108,10 +108,13 @@ auto main(
             boost::asio::placeholders::signal_number,
             std::ref(bot)));
 
-    bot.connect();
-    bot.async_listen_event();
-    context_io.run();
-    bot.disconnect();
+    while (bot.should_restart())
+    {
+        bot.connect();
+        bot.async_listen_event();
+        context_io.run();
+        bot.disconnect();
+    }
     BOOST_LOG_TRIVIAL(debug) << "stopped bot";
     return EXIT_SUCCESS;
 }

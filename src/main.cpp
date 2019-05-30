@@ -23,7 +23,7 @@ auto init_logger() -> void
 
     boost::log::core::get()->set_filter
     (
-        trivial::severity >= trivial::debug
+        trivial::severity >= trivial::trace
     );
 }
 
@@ -108,13 +108,17 @@ auto main(
             boost::asio::placeholders::signal_number,
             std::ref(bot)));
 
+    BOOST_LOG_TRIVIAL(trace) << "entering loop";
     while (bot.should_restart())
     {
+        BOOST_LOG_TRIVIAL(trace) << "start of loop";
         bot.connect();
         bot.async_listen_event();
         context_io.run();
         bot.disconnect();
+        BOOST_LOG_TRIVIAL(trace) << "end of loop";
     }
+    BOOST_LOG_TRIVIAL(trace) << "esacped loop";
     BOOST_LOG_TRIVIAL(debug) << "stopped bot";
     return EXIT_SUCCESS;
 }

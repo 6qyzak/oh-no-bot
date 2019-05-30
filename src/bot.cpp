@@ -71,20 +71,6 @@ auto http_post(
     return response_json;
 }
 
-auto handle_websocket_close(error_code const& error) -> void
-{
-    if (error)
-    {
-        if (error == ssl::error::stream_truncated)
-            BOOST_LOG_TRIVIAL(debug) << "Discord gateway has closed websocket stream";
-        else if (error == boost::asio::error::operation_aborted)
-            BOOST_LOG_TRIVIAL(debug) << "WebSocket close operation has been aborted";
-        else
-            BOOST_LOG_TRIVIAL(warning) << "error occured during closing websocket operation: " << error.message();
-    }
-    BOOST_LOG_TRIVIAL(debug) << "closed websocket";
-}
-
 enum class opcode_type
 {
     dispatch = 0,
@@ -120,6 +106,7 @@ auto to_event_type(std::string const& event_name) -> event_type
 
 auto heartbeat(qyzk::ohno::bot& bot, error_code const& error) -> void
 {
+    BOOST_LOG_TRIVIAL(trace) << "in ::heartbeat";
     if (error)
     {
         if (error == boost::asio::error::operation_aborted)
@@ -137,6 +124,7 @@ auto heartbeat(qyzk::ohno::bot& bot, error_code const& error) -> void
     if (!bot.is_running())
     {
         BOOST_LOG_TRIVIAL(debug) << "bot is not running not starting heartbeat operation";
+        BOOST_LOG_TRIVIAL(trace) << "out ::heartbeat";
         return;
     }
 
@@ -150,10 +138,13 @@ auto heartbeat(qyzk::ohno::bot& bot, error_code const& error) -> void
             heartbeat,
             std::ref(bot),
             placeholders::error));
+    BOOST_LOG_TRIVIAL(trace) << "queued another heartbeat operation";
+    BOOST_LOG_TRIVIAL(trace) << "out ::heartbeat";
 }
 
 auto start_heartbeat(qyzk::ohno::bot& bot)
 {
+    BOOST_LOG_TRIVIAL(trace) << "in bot::start_heartbeat";
     auto& timer = bot.get_heartbeat_timer();
     timer.expires_after(chrono::milliseconds(bot.get_heartbeat_interval()));
     timer.async_wait(
@@ -161,6 +152,7 @@ auto start_heartbeat(qyzk::ohno::bot& bot)
             heartbeat,
             std::ref(bot),
             placeholders::error));
+    BOOST_LOG_TRIVIAL(trace) << "out bot::start_heartbeat";
 }
 
 auto identify(
@@ -233,6 +225,11 @@ auto handle_message(qyzk::ohno::bot& bot, nlohmann::json const& payload) -> void
         bot.reset_ko3_timeout();
         send_message(bot, channel_id, "으아아악 고3이다");
     }
+
+    else if ((user == "257451263820562433" || user == "282580903904149504") && content == "are you alive?")
+    {
+        send_message(bot, channel_id, "yeees");
+    }
 }
 
 auto handle_event_dispatch(qyzk::ohno::bot& bot, nlohmann::json const& payload) -> void
@@ -287,6 +284,8 @@ auto handle_event(
     std::size_t bytes_written)
     -> void
 {
+    BOOST_LOG_TRIVIAL(trace) << "in bot::handle";
+
     if (error)
     {
         bool restart = false;
@@ -379,7 +378,12 @@ auto handle_event(
     }
 
     if (bot.is_running())
+    {
         bot.async_listen_event();
+        BOOST_LOG_TRIVIAL(trace) << "call bot::async_listen_event";
+    }
+
+    BOOST_LOG_TRIVIAL(trace) << "out bot::handle";
 }
 
 } // namespace
@@ -406,6 +410,8 @@ bot::bot(io_context& context_io, ohno::config& config)
 
 auto bot::connect(void) -> void
 {
+    BOOST_LOG_TRIVIAL(trace) << "in bot::connect";
+
     auto const& url = m_gateway.get_url();
     auto const pos = url.find("://") + 3;
     auto const hostname = url.substr(pos);
@@ -417,6 +423,7 @@ auto bot::connect(void) -> void
     if (error)
     {
         BOOST_LOG_TRIVIAL(error) << "failed to resolve Discord HTTP server: " << error.message();
+        BOOST_LOG_TRIVIAL(trace) << "out bot::connect, failed to resolve discord http server";
         return;
     }
 
@@ -424,6 +431,7 @@ auto bot::connect(void) -> void
     if (error)
     {
         BOOST_LOG_TRIVIAL(error) << "failed to resolve Discord gateway: " << error.message();
+        BOOST_LOG_TRIVIAL(trace) << "out bot::connect, failed to resolve discord gateway server";
         return;
     }
 
@@ -431,6 +439,7 @@ auto bot::connect(void) -> void
     if (error)
     {
         BOOST_LOG_TRIVIAL(error) << "failed to connect to Discord gateway: " << error.message();
+        BOOST_LOG_TRIVIAL(trace) << "out bot::connect, failed to connect to discord gateway server";
         return;
     }
 
@@ -438,23 +447,30 @@ auto bot::connect(void) -> void
     if (error)
     {
         BOOST_LOG_TRIVIAL(error) << "failed to SSL handshake with Discord gateway: " << error.message();
+        BOOST_LOG_TRIVIAL(trace) << "out bot::connect, failed to do SSL handshake with discord gateway server";
         return;
     }
 
     m_websocket.handshake(hostname, "/?v=6&encoding=json", error);
     if (error)
     {
-        BOOST_LOG_TRIVIAL(error) << "failed to WebSocket handshake with Discord gateway: " << error.message();
+        BOOST_LOG_TRIVIAL(error) << "failed to WebSocket handshake with discord gateway: " << error.message();
+        BOOST_LOG_TRIVIAL(trace) << "out bot::connect, failed to do websocket handshake with discord gateway server";
+        return;
     }
 
     m_is_running = true;
     reset_ko3_timeout();
 
     BOOST_LOG_TRIVIAL(debug) << "connected to Discord gateway";
+
+    BOOST_LOG_TRIVIAL(trace) << "out bot::connect";
 }
 
 auto bot::disconnect(void) -> void
 {
+    BOOST_LOG_TRIVIAL(trace) << "in bot::disconnect";
+
     BOOST_LOG_TRIVIAL(debug) << "disconnecting from Discord gateway";
 
     error_code error;
@@ -473,10 +489,14 @@ auto bot::disconnect(void) -> void
     BOOST_LOG_TRIVIAL(debug) << "disconnected from Discord gateway";
 
     m_heartbeat_interval = 0;
+
+    BOOST_LOG_TRIVIAL(trace) << "out bot::disconnect";
 }
 
 auto bot::beat(void) -> void
 {
+    BOOST_LOG_TRIVIAL(trace) << "in bot::beat";
+
     auto const sequence = m_config.get_event_sequence();
 
     nlohmann::json payload;
@@ -495,10 +515,14 @@ auto bot::beat(void) -> void
     }
 
     BOOST_LOG_TRIVIAL(debug) << "sent heartbeating";
+
+    BOOST_LOG_TRIVIAL(trace) << "out bot::beat";
 }
 
 auto bot::async_listen_event(void) -> void
 {
+    BOOST_LOG_TRIVIAL(trace) << "in bot::async_listen_event";
+
     m_websocket.async_read(
         m_buffer,
         boost::bind(
@@ -506,6 +530,8 @@ auto bot::async_listen_event(void) -> void
             std::ref(*this),
             boost::asio::placeholders::error,
             boost::asio::placeholders::bytes_transferred));
+
+    BOOST_LOG_TRIVIAL(trace) << "out bot::async_listen_event";
 }
 
 auto bot::get_heartbeat_timer() noexcept -> boost::asio::steady_timer&
@@ -530,16 +556,25 @@ auto bot::is_running() const noexcept -> bool
 
 auto bot::stop(bool const should_restart) noexcept -> void
 {
+    BOOST_LOG_TRIVIAL(trace) << "in bot::stop";
     if (!m_is_running)
+    {
+        BOOST_LOG_TRIVIAL(trace) << "returning in bot::stop, m_is_running == false";
         return;
+    }
 
     m_should_restart = should_restart;
 
     error_code error;
     m_timer_heartbeat.cancel(error);
-    get_lowest_layer(m_websocket).socket().cancel(error);
+
+    auto& socket = get_lowest_layer(m_websocket).socket();
+    socket.shutdown(ip::tcp::socket::shutdown_both, error);
+    socket.close(error);
 
     m_is_running = false;
+
+    BOOST_LOG_TRIVIAL(trace) << "out bot::stop";
 }
 
 auto bot::get_websocket_buffer() noexcept -> boost::beast::flat_buffer&
@@ -606,6 +641,7 @@ auto bot::is_ko3_timedout(void) noexcept -> bool
 
 auto bot::should_restart(void) const noexcept -> bool
 {
+    BOOST_LOG_TRIVIAL(trace) << "in bot::should_restart, value = " << m_should_restart;
     return m_should_restart;
 }
 

@@ -1,3 +1,4 @@
+#include <boost/algorithm/string.hpp>
 #include <boost/bind.hpp>
 #include <boost/log/trivial.hpp>
 
@@ -216,7 +217,8 @@ auto send_message(
 auto handle_message(qyzk::ohno::bot& bot, nlohmann::json const& payload) -> void
 {
     auto const message = payload["d"];
-    std::string const content = message["content"];
+    std::string content = message["content"];
+    boost::algorithm::to_lower(content);
     std::string const user = message["author"]["id"];
     std::string const channel_id = message["channel_id"];
 
@@ -224,6 +226,12 @@ auto handle_message(qyzk::ohno::bot& bot, nlohmann::json const& payload) -> void
     {
         bot.reset_ko3_timeout();
         send_message(bot, channel_id, "으아아악 고3이다");
+    }
+
+    else if (content.find("mod") != std::string::npos && content.find("gay") != std::string::npos)
+    {
+        send_message(bot, channel_id, "this incident will be reported and you will be removed from this server ez");
+        send_message(bot, channel_id, "fuck off anyways");
     }
 
     else if ((user == "257451263820562433" || user == "282580903904149504") && content == "are you alive?")

@@ -12,9 +12,9 @@ ADD_SUBDIRECTORY ("./lib/json")
 
 ADD_EXECUTABLE (
     "oh_no_bot"
-    ./src/bot.cpp
+    # ./src/bot.cpp
     ./src/config.cpp
-    ./src/gateway.cpp
+    # ./src/gateway.cpp
     ./src/main.cpp
 )
 

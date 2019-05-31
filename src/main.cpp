@@ -6,7 +6,11 @@
 #include <boost/log/expressions.hpp>
 #include <nlohmann/json.hpp>
 
+/*
 #include "./bot.h"
+*/
+#include "./cache.hpp"
+#include "./config.h"
 
 namespace
 {
@@ -27,6 +31,7 @@ auto init_logger() -> void
     );
 }
 
+/*
 auto handle_signal(
     boost::system::error_code const& error,
     int const signal,
@@ -42,6 +47,7 @@ auto handle_signal(
     bot.stop(false);
 }
 
+*/
 } // namespace
 
 auto main(
@@ -65,6 +71,7 @@ auto main(
         return EXIT_FAILURE;
     }
 
+    /*
     BOOST_LOG_TRIVIAL(debug) << "initialized logger";
 
     BOOST_LOG_TRIVIAL(debug) << "loading config";
@@ -120,5 +127,43 @@ auto main(
     }
     BOOST_LOG_TRIVIAL(trace) << "esacped loop";
     BOOST_LOG_TRIVIAL(debug) << "stopped bot";
+    return EXIT_SUCCESS;
+    */
+
+    std::unique_ptr< qyzk::ohno::config > config_p;
+    {
+        auto json_config = qyzk::ohno::load_config(argv[1]);
+        try
+        {
+            config_p.reset(new qyzk::ohno::config(json_config));
+        }
+        catch (std::exception const& error)
+        {
+            BOOST_LOG_TRIVIAL(error) << "failed to load config: " << error.what();
+            return EXIT_FAILURE;
+        }
+
+        using key = qyzk::ohno::config_cache_descriptor::key_type;
+
+        auto const& config = *config_p;
+        BOOST_LOG_TRIVIAL(debug) << "loaded config";
+        BOOST_LOG_TRIVIAL(debug) << "token: " << config.get_token();
+        BOOST_LOG_TRIVIAL(debug) << "discord hostname: " << config.get_discord_hostname();
+        BOOST_LOG_TRIVIAL(debug) << "gateway option: " << config.get_gateway_option();
+        BOOST_LOG_TRIVIAL(debug) << "http api location: " << config.get_http_api_location();
+        BOOST_LOG_TRIVIAL(debug) << "gatway version: " << config.get_gateway_version();
+        BOOST_LOG_TRIVIAL(debug) << "http api version: " << config.get_http_api_version();
+        BOOST_LOG_TRIVIAL(debug);
+
+        auto const& cache = config.get_cache();
+        BOOST_LOG_TRIVIAL(debug) << "loaded cache";
+        BOOST_LOG_TRIVIAL(debug) << "session id: " << cache.get< key::session_id >();
+        BOOST_LOG_TRIVIAL(debug) << "last event sequence: " << cache.get< key::last_event_sequence >();
+
+        qyzk::ohno::save_config(argv[1], config);
+    }
+
+    config_p.reset();
+
     return EXIT_SUCCESS;
 }

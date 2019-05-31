@@ -4,41 +4,61 @@
 #include <filesystem>
 #include <string>
 
+#include "./cache.hpp"
+
 namespace qyzk::ohno
 {
+
+class config_cache_descriptor
+{
+public:
+    enum class key_type : std::size_t
+    {
+        session_id = 0,
+        last_event_sequence = 1,
+    };
+
+    static constexpr auto number() noexcept -> std::size_t
+    {
+        return 2;
+    }
+}; // class config_cache_descriptor
 
 class config
 {
 public:
-    config(void);
-    auto load(std::filesystem::path const& config_path) -> void;
-    auto get_token(void) const noexcept -> std::string const&;
-    auto get_api_version(void) const noexcept -> uint32_t;
-    auto get_gateway_version(void) const noexcept -> uint32_t;
-    auto get_discord_url(void) const noexcept -> std::string const&;
+    using cache_type = qyzk::cache< config_cache_descriptor, std::string, uint32_t >;
+
+    config(nlohmann::json const& config);
+
     auto get_discord_hostname(void) const noexcept -> std::string const&;
+    auto get_gateway_option(void) const noexcept -> std::string const&;
+    auto get_gateway_version(void) const noexcept -> uint32_t;
+    auto get_http_api_location(void) const noexcept -> std::string const&;
+    auto get_http_api_version(void) const noexcept -> uint32_t;
+    auto get_token(void) const noexcept -> std::string const&;
 
-    auto has_session_id(void) const noexcept -> bool;
-    auto set_session_id(std::string const& session_id) -> void;
-    auto get_session_id(void) const noexcept -> std::string const&;
-
-    auto has_event_sequence(void) const noexcept -> bool;
-    auto set_event_sequence(uint32_t const sequence) -> void;
-    auto get_event_sequence(void) const noexcept -> uint32_t;
-
-    auto save_cache(void) -> void;
+    auto get_cache() const noexcept -> cache_type const&;
+    auto get_cache() noexcept -> cache_type&;
 
 private:
-    std::filesystem::path m_path_config;
-    std::string m_token;
-    uint32_t m_version_api;
-    uint32_t m_version_gateway;
-    std::string const m_url_discord;
-    std::string m_url_discord_api;
     std::string const m_hostname_discord;
-    std::string m_id_session;
-    uint32_t m_sequence_event;
+    uint32_t const m_version_api_http;
+    uint32_t const m_version_gateway;
+    std::string const m_location_api_http;
+    std::string const m_option_gateway;
+    std::string const m_token;
+    cache_type m_cache;
 }; // class qyzk::ohno::config
+
+auto load_config(
+    std::filesystem::path const& path_config)
+    -> ohno::config;
+
+auto save_config(
+    std::filesystem::path const& path_config,
+    ohno::config const& config)
+    -> void;
 
 } // namespace qyzk
 

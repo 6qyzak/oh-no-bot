@@ -12,7 +12,7 @@ namespace
 
 auto get_http_api_location(uint32_t const version_api_http) -> std::string
 {
-    return "/api/v" + std::to_string(version_api_http) + "/";
+    return "/api/v" + std::to_string(version_api_http);
 }
 
 auto get_gateway_option(uint32_t const version_gateway) -> std::string

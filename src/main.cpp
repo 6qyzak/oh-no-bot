@@ -1,7 +1,8 @@
 #include <iostream>
 #include <memory>
 
-#include <boost/bind.hpp>
+#include <boost/asio.hpp>
+#include <boost/asio/ssl.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/expressions.hpp>
 #include <nlohmann/json.hpp>
@@ -11,6 +12,9 @@
 */
 #include "./cache.hpp"
 #include "./config.h"
+#include "./http_request.h"
+
+using namespace boost::asio;
 
 namespace
 {
@@ -70,28 +74,12 @@ auto main(
         std::cerr << "failed to initialize logger: " << error.what() << std::endl;
         return EXIT_FAILURE;
     }
-
-    /*
     BOOST_LOG_TRIVIAL(debug) << "initialized logger";
 
-    BOOST_LOG_TRIVIAL(debug) << "loading config";
-    qyzk::ohno::config config;
-    try
-    {
-        config.load(argv[1]);
-    }
+    io_context context_io;
+    ssl::context context_ssl(ssl::context::tlsv12_client);
 
-    catch (std::exception const& error)
-    {
-        BOOST_LOG_TRIVIAL(error) << "failed to load config file";
-        BOOST_LOG_TRIVIAL(error) << error.what();
-        return EXIT_FAILURE;
-    }
-
-    BOOST_LOG_TRIVIAL(debug) << "loaded config";
-    BOOST_LOG_TRIVIAL(debug) << "using Discord API version " << config.get_api_version();
-    BOOST_LOG_TRIVIAL(debug) << "using Discord Gateway version " << config.get_gateway_version();
-
+    /*
     boost::asio::io_context context_io;
 
     std::unique_ptr< qyzk::ohno::bot > bot_p;
@@ -161,6 +149,9 @@ auto main(
         BOOST_LOG_TRIVIAL(debug) << "last event sequence: " << cache.get< key::last_event_sequence >();
 
         qyzk::ohno::save_config(argv[1], config);
+
+        auto bot = qyzk::ohno::get_gateway_bot(config);
+        BOOST_LOG_TRIVIAL(debug) << bot["wss"];
     }
 
     config_p.reset();

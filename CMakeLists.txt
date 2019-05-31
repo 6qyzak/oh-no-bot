@@ -16,6 +16,7 @@ ADD_EXECUTABLE (
     ./src/config.cpp
     # ./src/gateway.cpp
     ./src/main.cpp
+    ./src/http_request.cpp
 )
 
 SET_PROPERTY (

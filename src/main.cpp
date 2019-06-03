@@ -35,6 +35,25 @@ auto init_logger() -> void
     );
 }
 
+auto print_config(qyzk::ohno::config const& config)
+{
+    using key = qyzk::ohno::config_cache_descriptor::key_type;
+
+    BOOST_LOG_TRIVIAL(debug) << "loaded config";
+    BOOST_LOG_TRIVIAL(debug) << "token: " << config.get_token();
+    BOOST_LOG_TRIVIAL(debug) << "discord hostname: " << config.get_discord_hostname();
+    BOOST_LOG_TRIVIAL(debug) << "gateway option: " << config.get_gateway_option();
+    BOOST_LOG_TRIVIAL(debug) << "http api location: " << config.get_http_api_location();
+    BOOST_LOG_TRIVIAL(debug) << "gatway version: " << config.get_gateway_version();
+    BOOST_LOG_TRIVIAL(debug) << "http api version: " << config.get_http_api_version();
+    BOOST_LOG_TRIVIAL(debug);
+
+    auto const& cache = config.get_cache();
+    BOOST_LOG_TRIVIAL(debug) << "loaded cache";
+    BOOST_LOG_TRIVIAL(debug) << "session id: " << cache.get< key::session_id >();
+    BOOST_LOG_TRIVIAL(debug) << "last event sequence: " << cache.get< key::last_event_sequence >();
+}
+
 /*
 auto handle_signal(
     boost::system::error_code const& error,
@@ -130,28 +149,16 @@ auto main(
             BOOST_LOG_TRIVIAL(error) << "failed to load config: " << error.what();
             return EXIT_FAILURE;
         }
+    }
 
-        using key = qyzk::ohno::config_cache_descriptor::key_type;
-
-        auto const& config = *config_p;
-        BOOST_LOG_TRIVIAL(debug) << "loaded config";
-        BOOST_LOG_TRIVIAL(debug) << "token: " << config.get_token();
-        BOOST_LOG_TRIVIAL(debug) << "discord hostname: " << config.get_discord_hostname();
-        BOOST_LOG_TRIVIAL(debug) << "gateway option: " << config.get_gateway_option();
-        BOOST_LOG_TRIVIAL(debug) << "http api location: " << config.get_http_api_location();
-        BOOST_LOG_TRIVIAL(debug) << "gatway version: " << config.get_gateway_version();
-        BOOST_LOG_TRIVIAL(debug) << "http api version: " << config.get_http_api_version();
-        BOOST_LOG_TRIVIAL(debug);
-
-        auto const& cache = config.get_cache();
-        BOOST_LOG_TRIVIAL(debug) << "loaded cache";
-        BOOST_LOG_TRIVIAL(debug) << "session id: " << cache.get< key::session_id >();
-        BOOST_LOG_TRIVIAL(debug) << "last event sequence: " << cache.get< key::last_event_sequence >();
-
-        qyzk::ohno::save_config(argv[1], config);
-
-        auto bot = qyzk::ohno::get_gateway_bot(config);
-        BOOST_LOG_TRIVIAL(debug) << bot["wss"];
+    auto& config = *config_p;
+    auto const material_bot = qyzk::ohno::get_gateway_bot(config);
+    if (material_bot.session_start_limit.remaining == 0)
+    {
+        auto const reset_after = material_bot.session_start_limit.reset_after;
+        BOOST_LOG_TRIVIAL(error) << "no session is remaining try after " << (reset_after / 1000) << " seconds";
+        config_p.reset();
+        return EXIT_FAILURE;
     }
 
     config_p.reset();

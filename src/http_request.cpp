@@ -1,15 +1,12 @@
 #include <exception>
+#include <type_traits>
 
-#include <boost/beast.hpp>
-#include <boost/beast/ssl.hpp>
 #include <boost/log/trivial.hpp>
 
 #include "./http_request.h"
 
 using namespace boost::asio;
 using namespace boost::beast;
-
-using stream_type = ssl_stream< tcp_stream >;
 
 namespace
 {
@@ -77,7 +74,7 @@ public:
     }
 };
 
-auto set_sni(stream_type& stream, std::string const& hostname) -> void
+auto set_sni(qyzk::ohno::stream_type& stream, std::string const& hostname) -> void
 {
     if (SSL_set_tlsext_host_name(stream.native_handle(), hostname.c_str()) != 1)
     {
@@ -134,7 +131,7 @@ auto secure_connect(
     return stream;
 }
 
-auto secure_disconnect(stream_type& stream) noexcept -> void
+auto secure_disconnect(stream_type& stream) -> void
 {
     error_code error;
     stream.shutdown(error);
@@ -147,6 +144,11 @@ auto secure_disconnect(stream_type& stream) noexcept -> void
     }
 
     get_lowest_layer(stream).close();
+}
+
+auto disconnect_from_gateway(stream_type& stream) -> void
+{
+    secure_disconnect(stream);
 }
 
 auto send_request(stream_type& stream, http::request< http::string_body > const& request) -> nlohmann::json
@@ -192,7 +194,7 @@ auto send_request(stream_type& stream, http::request< http::string_body > const&
 auto get_gateway_bot(
     ohno::config const& config,
     std::optional< hosts_type > const& hosts_resolved)
-    -> nlohmann::json
+    -> get_gateway_bot_result
 {
     io_context context_io;
     ssl::context context_ssl(ssl::context::tlsv12_client);
@@ -225,7 +227,36 @@ auto get_gateway_bot(
     }
 
     secure_disconnect(stream);
-    return response;
+
+    auto const& session_start_limit = response["session_start_limit"];
+    get_gateway_bot_result result {
+        response["url"],
+        response["shards"],
+        {
+            session_start_limit["total"],
+            session_start_limit["remaining"],
+            session_start_limit["reset_after"],
+        },
+    };
+    return result;
+}
+
+auto connect_to_gateway(
+    boost::asio::io_context& context_io,
+    boost::asio::ssl::context& context_ssl,
+    std::string const& url,
+    std::string const& option)
+    -> stream_type
+{
+    const auto& hostname = url;
+
+    stream_type stream(context_io, context_ssl);
+    set_sni(stream, hostname);
+
+    auto hosts = resolve(hostname, "https");
+    secure_connect(context_io, context_ssl, hostname, hosts);
+
+    return stream;
 }
 
 } // namespace qyzk::ohno

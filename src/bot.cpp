@@ -1,4 +1,5 @@
 #include <map>
+#include <vector>
 
 #include <boost/bind.hpp>
 #include <boost/log/trivial.hpp>
@@ -30,6 +31,24 @@ auto get_sequence(qyzk::ohno::config const& config) -> uint32_t
         return cache.get< key::last_event_sequence >();
 }
 
+auto is_dohyeon(std::string const& id) -> bool
+{
+    return id == "305519394656878595"; // yeeees
+}
+
+auto has_magic_word(std::string const& content) -> bool
+{
+    if (content.empty())
+        return false;
+
+    std::vector<char> content_buffer;
+    content_buffer.reserve(content.size());
+    for (auto const c : content)
+        content_buffer.emplace_back(std::tolower(c));
+    std::string content_string(content_buffer.data());
+    return content_string.find("mod") != std::string::npos && content_string.find("gay") != std::string::npos;
+}
+
 } // namespace
 
 namespace qyzk::ohno
@@ -45,6 +64,7 @@ bot::bot(
     get_gateway_bot_result const& material_bot)
     : m_path_config(path_config)
     , m_config(config)
+    , m_hosts_http(resolve(config.get_discord_hostname(), "https"))
     , m_context_io(context_io)
     , m_context_ssl(context_ssl)
     , m_buffer_event()
@@ -57,6 +77,7 @@ bot::bot(
     , m_timer_heartbeat(m_context_io)
     , m_status_connection(connection_status_type::connecting)
     , m_is_running(true)
+    , m_timer_ko3()
 {
 }
 
@@ -102,7 +123,7 @@ auto bot::handle_event(
         {
             BOOST_LOG_TRIVIAL(error) << "oh no unexpected connection error: " << error.message();
             m_is_running = false;
-            m_timer_heartbeat.cancel();
+            m_context_io.stop();
         }
         else if (error == boost::asio::error::operation_aborted)
         {
@@ -217,6 +238,8 @@ auto bot::handle_invalid_session(json const& payload) -> void
     {
     case connection_status_type::connecting:
         BOOST_LOG_TRIVIAL(error) << "starting new session has rejected, maybe rate limited?";
+        m_is_running = false;
+        m_context_io.stop();
         return;
 
     case connection_status_type::connected:
@@ -268,11 +291,46 @@ auto bot::handle_event_dispatch(json const& payload) -> void
         m_status_connection = connection_status_type::connected;
         break;
 
+    case event_type::message_create:
+        BOOST_LOG_TRIVIAL(debug) << "get message create event";
+        handle_message_create(payload);
+        break;
+
     default:
         BOOST_LOG_TRIVIAL(debug) << "skipping event " << event_name;
     }
 
     save_config(m_path_config, m_config);
+}
+
+auto bot::handle_message_create(json const& payload) -> void
+{
+    auto const& data = payload["d"];
+    std::string const& id = data["author"]["id"];
+    std::string const& content = data["content"];
+    std::string const& channel = data["channel_id"];
+
+    if (is_dohyeon(id) && chrono::system_clock::now() - m_timer_ko3 >= chrono::seconds(30))
+    {
+        m_timer_ko3 = chrono::system_clock::now();
+        send_message(m_config, m_hosts_http, channel, "으아아악 고3이다");
+    }
+
+    else if (id == "257451263820562433" && content == "oh no")
+    {
+        send_message(m_config, m_hosts_http, channel, "oh no");
+    }
+
+    else if (has_magic_word(content))
+    {
+        // oh no time for punishment
+        std::string const& username = data["author"]["username"];
+        auto const& guild = data["guild_id"];
+        auto message = "removed " + username + " from server because he confessed he's gay :joy:";
+        send_message(m_config, m_hosts_http, channel, message);
+        kick(m_config, m_hosts_http, guild, id);
+        delete_message(m_config, m_hosts_http, channel, data["id"]);
+    }
 }
 
 } // namespace qyzk::ohno

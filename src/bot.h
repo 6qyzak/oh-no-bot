@@ -18,6 +18,7 @@ class bot
 {
 public:
     using buffer_type = boost::beast::flat_buffer;
+    using ko3_timer_type = std::chrono::time_point< std::chrono::system_clock >;
 
     bot(
         std::filesystem::path const& path_config,
@@ -40,9 +41,11 @@ private:
         -> void;
     auto handle_invalid_session(nlohmann::json const& payload) -> void;
     auto handle_event_dispatch(nlohmann::json const& payload) -> void;
+    auto handle_message_create(nlohmann::json const& payload) -> void;
 
     std::filesystem::path const m_path_config;
     ohno::config& m_config;
+    hosts_type const m_hosts_http;
     boost::asio::io_context& m_context_io;
     boost::asio::ssl::context& m_context_ssl;
     boost::beast::flat_buffer m_buffer_event;
@@ -51,6 +54,7 @@ private:
     boost::asio::steady_timer m_timer_heartbeat;
     connection_status_type m_status_connection;
     bool m_is_running;
+    ko3_timer_type m_timer_ko3;
 };
 
 } // namespace qyzk::ohno

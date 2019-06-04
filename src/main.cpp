@@ -113,7 +113,8 @@ auto main(
     }
 
     auto& config = *config_p;
-    auto const material_bot = qyzk::ohno::get_gateway_bot(config);
+    auto hosts_http = qyzk::ohno::resolve(config.get_discord_hostname(), "https");
+    auto const material_bot = qyzk::ohno::get_gateway_bot(config, hosts_http);
     if (material_bot.session_start_limit.remaining == 0)
     {
         auto const reset_after = material_bot.session_start_limit.reset_after;
@@ -137,6 +138,12 @@ auto main(
 
     while (!interrupted)
     {
+        if (context_io.stopped())
+        {
+            BOOST_LOG_TRIVIAL(warning) << "io context has stopped";
+            context_io.restart();
+        }
+
         try
         {
             bot_p.reset(new qyzk::ohno::bot(argv[1], context_io, context_ssl, config, material_bot));

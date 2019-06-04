@@ -7,6 +7,7 @@
 
 using namespace boost::asio;
 using namespace boost::beast;
+using json = nlohmann::json;
 
 namespace
 {
@@ -112,7 +113,7 @@ auto secure_connect(
     return stream;
 }
 
-auto send_request(qyzk::ohno::stream_type& stream, http::request< http::string_body > const& request) -> nlohmann::json
+auto send_request(qyzk::ohno::stream_type& stream, http::request< http::string_body > const& request) -> json
 {
     error_code error;
     http::write(stream, request, error);
@@ -136,10 +137,14 @@ auto send_request(qyzk::ohno::stream_type& stream, http::request< http::string_b
     BOOST_LOG_TRIVIAL(debug) << "received http response";
     BOOST_LOG_TRIVIAL(debug) << "result: " << response.result_int() << " " << response.result();
 
-    nlohmann::json body;
+    json body;
+
+    if (response.result_int() == 204)
+        return json();
+
     try
     {
-        body = nlohmann::json::parse(response.body());
+        body = json::parse(response.body());
     }
     catch (std::exception const& error)
     {
@@ -194,16 +199,11 @@ auto resolve(std::string const& hostname, std::string const& service) -> hosts_t
 
 auto get_gateway_bot(
     ohno::config const& config,
-    std::optional< hosts_type > const& hosts_resolved)
+    hosts_type const& hosts)
     -> get_gateway_bot_result
 {
     io_context context_io;
     ssl::context context_ssl(ssl::context::tlsv12_client);
-
-    hosts_type hosts = hosts_resolved.value_or(
-        ohno::resolve(
-            config.get_discord_hostname(),
-            "https"));
 
     auto stream = secure_connect(
         context_io,
@@ -216,7 +216,7 @@ auto get_gateway_bot(
     request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     request.set(http::field::authorization, "Bot " + config.get_token());
 
-    nlohmann::json response;
+    json response;
     try
     {
         response = send_request(stream, request);
@@ -272,4 +272,109 @@ auto disconnect_from_gateway(stream_type& stream) -> void
     secure_disconnect(stream);
 }
 
+auto send_message(
+    ohno::config const& config,
+    hosts_type const& hosts,
+    std::string const channel,
+    std::string const message)
+    -> void
+{
+    io_context context_io;
+    ssl::context context_ssl(ssl::context::tlsv12_client);
+
+    json body;
+    body["content"] = message;
+
+    auto stream = secure_connect(
+        context_io,
+        context_ssl,
+        config.get_discord_hostname(),
+        hosts);
+
+    auto body_string = body.dump();
+
+    http::request< http::string_body > request {
+        http::verb::post,
+        config.get_http_api_location() + "/channels/" + channel + "/messages",
+        11,
+    };
+    request.set(http::field::host, config.get_discord_hostname());
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::authorization, "Bot " + config.get_token());
+    request.set(http::field::content_length, body_string.size());
+    request.set(http::field::content_type, "application/json");
+    request.body() = body_string;
+
+    json response;
+    try
+    {
+        response = send_request(stream, request);
+    }
+    catch (std::exception const& error)
+    {
+        secure_disconnect(stream);
+        throw;
+    }
+
+    secure_disconnect(stream);
+}
+
+auto kick(
+    ohno::config const& config,
+    hosts_type const& hosts,
+    std::string const guild,
+    std::string const id)
+    -> void
+{
+    io_context context_io;
+    ssl::context context_ssl(ssl::context::tlsv12_client);
+
+    auto stream = secure_connect(
+        context_io,
+        context_ssl,
+        config.get_discord_hostname(),
+        hosts);
+
+    http::request< http::string_body > request {
+        http::verb::delete_,
+        config.get_http_api_location() + "/guilds/" + guild + "/members/" + id,
+        11,
+    };
+    request.set(http::field::host, config.get_discord_hostname());
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::authorization, "Bot " + config.get_token());
+
+    send_request(stream, request);
+    secure_disconnect(stream);
+}
+
+auto delete_message(
+    ohno::config const& config,
+    hosts_type const& hosts,
+    std::string const channel,
+    std::string const id)
+    -> void
+{
+    io_context context_io;
+    ssl::context context_ssl(ssl::context::tlsv12_client);
+
+    auto stream = secure_connect(
+        context_io,
+        context_ssl,
+        config.get_discord_hostname(),
+        hosts);
+
+    http::request< http::string_body > request {
+        http::verb::delete_,
+        config.get_http_api_location() + "/channels/" + channel + "/messages/" + id,
+        11,
+    };
+    request.set(http::field::host, config.get_discord_hostname());
+    request.set(http::field::user_agent, BOOST_BEAST_VERSION_STRING);
+    request.set(http::field::authorization, "Bot " + config.get_token());
+
+    send_request(stream, request);
+
+    secure_disconnect(stream);
+}
 } // namespace qyzk::ohno

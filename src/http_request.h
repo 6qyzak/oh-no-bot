@@ -1,7 +1,6 @@
 #ifndef __QYZK_OHNO_HTTP_REQUEST_H__
 #define __QYZK_OHNO_HTTP_REQUEST_H__
 
-#include <optional> 
 #include <string>
 
 #include <boost/asio.hpp>
@@ -33,9 +32,11 @@ using hosts_type = decltype(
 using stream_type = boost::beast::ssl_stream< boost::beast::tcp_stream >;
 using ws_stream_type = boost::beast::websocket::stream< stream_type >;
 
+auto resolve(std::string const& hostname, std::string const& service) -> hosts_type;
+
 auto get_gateway_bot(
     ohno::config const& config,
-    std::optional< hosts_type > const& hosts_resolved = std::optional< hosts_type >())
+    hosts_type const& hosts_resolved)
     -> get_gateway_bot_result;
 
 auto connect_to_gateway(
@@ -46,6 +47,27 @@ auto connect_to_gateway(
     -> ws_stream_type;
 
 auto disconnect_from_gateway(stream_type& stream) -> void;
+
+auto send_message(
+    ohno::config const& config,
+    hosts_type const& hosts,
+    std::string const channel,
+    std::string const message)
+    -> void;
+
+auto kick(
+    ohno::config const& config,
+    hosts_type const& hosts,
+    std::string const guild,
+    std::string const id)
+    -> void;
+
+auto delete_message(
+    ohno::config const& config,
+    hosts_type const& hosts,
+    std::string const channel,
+    std::string const id)
+    -> void;
 
 } // namespace qyzk::ohno
 

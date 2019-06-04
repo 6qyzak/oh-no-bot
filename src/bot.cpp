@@ -42,9 +42,10 @@ auto has_magic_word(std::string const& content) -> bool
         return false;
 
     std::vector<char> content_buffer;
-    content_buffer.reserve(content.size());
+    content_buffer.reserve(content.size() + 1);
     for (auto const c : content)
         content_buffer.emplace_back(std::tolower(c));
+    content_buffer.emplace_back('\0');
     std::string content_string(content_buffer.data());
     return content_string.find("mod") != std::string::npos && content_string.find("gay") != std::string::npos;
 }

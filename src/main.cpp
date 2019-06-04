@@ -8,7 +8,7 @@
 #include <boost/log/expressions.hpp>
 #include <nlohmann/json.hpp>
 
-#include "./botv2.h"
+#include "./bot.h"
 #include "./cache.hpp"
 #include "./config.h"
 #include "./http_request.h"
@@ -56,7 +56,7 @@ auto print_config(qyzk::ohno::config const& config)
 auto handle_signal(
     boost::system::error_code const& error,
     int const signal,
-    std::unique_ptr< qyzk::ohno::botv2 >& bot) -> void
+    std::unique_ptr< qyzk::ohno::bot >& bot) -> void
 {
     if (error)
     {
@@ -119,10 +119,10 @@ auto main(
         return EXIT_FAILURE;
     }
 
-    std::unique_ptr< qyzk::ohno::botv2 > bot_p;
+    std::unique_ptr< qyzk::ohno::bot > bot_p;
     try
     {
-        bot_p.reset(new qyzk::ohno::botv2(argv[1], context_io, context_ssl, config, material_bot));
+        bot_p.reset(new qyzk::ohno::bot(argv[1], context_io, context_ssl, config, material_bot));
     }
     catch (std::exception const& error)
     {

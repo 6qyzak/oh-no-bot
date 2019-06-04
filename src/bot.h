@@ -14,12 +14,12 @@ enum class connection_status_type
     resuming,
 };
 
-class botv2
+class bot
 {
 public:
     using buffer_type = boost::beast::flat_buffer;
 
-    botv2(
+    bot(
         std::filesystem::path const& path_config,
         boost::asio::io_context& context_io,
         boost::asio::ssl::context& context_ssl,

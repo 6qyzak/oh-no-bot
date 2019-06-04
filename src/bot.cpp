@@ -3,7 +3,7 @@
 #include <boost/bind.hpp>
 #include <boost/log/trivial.hpp>
 
-#include "./botv2.h"
+#include "./bot.h"
 #include "./command.h"
 #include "./opcode.h"
 #include "./event.h"
@@ -37,7 +37,7 @@ namespace qyzk::ohno
 
 using json = nlohmann::json;
 
-botv2::botv2(
+bot::bot(
     std::filesystem::path const& path_config,
     boost::asio::io_context& context_io,
     boost::asio::ssl::context& context_ssl,
@@ -60,18 +60,18 @@ botv2::botv2(
 {
 }
 
-auto botv2::async_listen_event(void) -> void
+auto bot::async_listen_event(void) -> void
 {
     m_stream_gateway.async_read(
         m_buffer_event,
         boost::bind(
-            &botv2::handle_event,
+            &bot::handle_event,
             this,
             boost::asio::placeholders::error,
             boost::asio::placeholders::bytes_transferred));
 }
 
-auto botv2::stop(void) -> void
+auto bot::stop(void) -> void
 {
     m_is_running = false;
     m_timer_heartbeat.cancel();
@@ -91,7 +91,7 @@ auto botv2::stop(void) -> void
     }
 }
 
-auto botv2::handle_event(
+auto bot::handle_event(
     error_code const& error,
     std::size_t const bytes_written)
     -> void
@@ -134,7 +134,7 @@ auto botv2::handle_event(
             chrono::milliseconds(m_interval_heartbeat));
         m_timer_heartbeat.async_wait(
             boost::bind(
-                &botv2::heartbeat,
+                &bot::heartbeat,
                 this,
                 placeholders::error));
         ohno::heartbeat(m_stream_gateway, get_sequence(m_config));
@@ -168,19 +168,19 @@ auto botv2::handle_event(
         async_listen_event();
 }
 
-auto botv2::async_heartbeat() -> void
+auto bot::async_heartbeat() -> void
 {
     m_timer_heartbeat.expires_at(
         m_timer_heartbeat.expiry()
         + chrono::milliseconds(m_interval_heartbeat));
     m_timer_heartbeat.async_wait(
         boost::bind(
-            &botv2::heartbeat,
+            &bot::heartbeat,
             this,
             placeholders::error));
 }
 
-auto botv2::heartbeat(error_code const& error) -> void
+auto bot::heartbeat(error_code const& error) -> void
 {
     if (error)
     {
@@ -199,7 +199,7 @@ auto botv2::heartbeat(error_code const& error) -> void
         async_heartbeat();
 }
 
-auto botv2::handle_invalid_session(json const& payload) -> void
+auto bot::handle_invalid_session(json const& payload) -> void
 {
     auto& cache = m_config.get_cache();
 
@@ -236,7 +236,7 @@ auto botv2::handle_invalid_session(json const& payload) -> void
     }
 }
 
-auto botv2::handle_event_dispatch(json const& payload) -> void
+auto bot::handle_event_dispatch(json const& payload) -> void
 {
     auto& cache = m_config.get_cache();
     cache.set< key::last_event_sequence >(payload["s"]);

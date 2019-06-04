@@ -3,13 +3,12 @@
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
+#include <boost/bind.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/expressions.hpp>
 #include <nlohmann/json.hpp>
 
-/*
-#include "./bot.h"
-*/
+#include "./botv2.h"
 #include "./cache.hpp"
 #include "./config.h"
 #include "./http_request.h"
@@ -54,11 +53,10 @@ auto print_config(qyzk::ohno::config const& config)
     BOOST_LOG_TRIVIAL(debug) << "last event sequence: " << cache.get< key::last_event_sequence >();
 }
 
-/*
 auto handle_signal(
     boost::system::error_code const& error,
     int const signal,
-    qyzk::ohno::bot& bot) -> void
+    std::unique_ptr< qyzk::ohno::botv2 >& bot) -> void
 {
     if (error)
     {
@@ -67,10 +65,9 @@ auto handle_signal(
     }
 
     BOOST_LOG_TRIVIAL(debug) << "signal caught, stopping bot";
-    bot.stop(false);
+    bot->stop();
 }
 
-*/
 } // namespace
 
 auto main(
@@ -98,45 +95,6 @@ auto main(
     io_context context_io;
     ssl::context context_ssl(ssl::context::tlsv12_client);
 
-    /*
-    boost::asio::io_context context_io;
-
-    std::unique_ptr< qyzk::ohno::bot > bot_p;
-    try
-    {
-        bot_p.reset(new qyzk::ohno::bot(context_io, config));
-    }
-    catch (std::exception const& error)
-    {
-        BOOST_LOG_TRIVIAL(error) << "failed to initialize bot: " << error.what();
-        return EXIT_FAILURE;
-    }
-
-    auto& bot = *bot_p;
-
-    boost::asio::signal_set signals(context_io, SIGINT, SIGTERM);
-    signals.async_wait(
-        boost::bind(
-            handle_signal,
-            boost::asio::placeholders::error,
-            boost::asio::placeholders::signal_number,
-            std::ref(bot)));
-
-    BOOST_LOG_TRIVIAL(trace) << "entering loop";
-    while (bot.should_restart())
-    {
-        BOOST_LOG_TRIVIAL(trace) << "start of loop";
-        bot.connect();
-        bot.async_listen_event();
-        context_io.run();
-        bot.disconnect();
-        BOOST_LOG_TRIVIAL(trace) << "end of loop";
-    }
-    BOOST_LOG_TRIVIAL(trace) << "esacped loop";
-    BOOST_LOG_TRIVIAL(debug) << "stopped bot";
-    return EXIT_SUCCESS;
-    */
-
     std::unique_ptr< qyzk::ohno::config > config_p;
     {
         auto json_config = qyzk::ohno::load_config(argv[1]);
@@ -161,7 +119,28 @@ auto main(
         return EXIT_FAILURE;
     }
 
-    config_p.reset();
+    std::unique_ptr< qyzk::ohno::botv2 > bot_p;
+    try
+    {
+        bot_p.reset(new qyzk::ohno::botv2(argv[1], context_io, context_ssl, config, material_bot));
+    }
+    catch (std::exception const& error)
+    {
+        BOOST_LOG_TRIVIAL(error) << "failed to initialize bot: " << error.what();
+        return EXIT_FAILURE;
+    }
+
+    boost::asio::signal_set signals(context_io, SIGINT, SIGTERM);
+    signals.async_wait(
+        boost::bind(
+            handle_signal,
+            boost::asio::placeholders::error,
+            boost::asio::placeholders::signal_number,
+            std::ref(bot_p)));
+
+    auto& bot = *bot_p;
+    bot.async_listen_event();
+    context_io.run();
 
     return EXIT_SUCCESS;
 }

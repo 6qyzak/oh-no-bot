@@ -31,6 +31,7 @@ using hosts_type = decltype(
             std::declval< std::string >()));
 
 using stream_type = boost::beast::ssl_stream< boost::beast::tcp_stream >;
+using ws_stream_type = boost::beast::websocket::stream< stream_type >;
 
 auto get_gateway_bot(
     ohno::config const& config,
@@ -39,8 +40,10 @@ auto get_gateway_bot(
 
 auto connect_to_gateway(
     boost::asio::io_context& context_io,
-    boost::asio::ssl::context& context_ssl)
-    -> stream_type;
+    boost::asio::ssl::context& context_ssl,
+    std::string const& url,
+    std::string const& option)
+    -> ws_stream_type;
 
 auto disconnect_from_gateway(stream_type& stream) -> void;
 

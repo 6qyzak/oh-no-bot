@@ -83,33 +83,14 @@ auto set_sni(qyzk::ohno::stream_type& stream, std::string const& hostname) -> vo
     }
 }
 
-} // namespace
-
-namespace qyzk::ohno
-{
-
-auto resolve(std::string const& hostname, std::string const& service) -> hosts_type
-{
-    io_context context_io;
-    ip::tcp::resolver resolver(context_io);
-    error_code error;
-    auto hosts = resolver.resolve(hostname, service, error);
-    if (error)
-    {
-        BOOST_LOG_TRIVIAL(error) << "failed to resolve host: " << error.message();
-        throw hostname_resolve_error();
-    }
-    return hosts;
-}
-
 auto secure_connect(
     io_context& context_io,
     ssl::context& context_ssl,
     std::string const& hostname,
-    hosts_type const& hosts)
-    -> stream_type
+    qyzk::ohno::hosts_type const& hosts)
+    -> qyzk::ohno::stream_type
 {
-    stream_type stream(context_io, context_ssl);
+    qyzk::ohno::stream_type stream(context_io, context_ssl);
     set_sni(stream, hostname);
 
     error_code error;
@@ -131,27 +112,7 @@ auto secure_connect(
     return stream;
 }
 
-auto secure_disconnect(stream_type& stream) -> void
-{
-    error_code error;
-    stream.shutdown(error);
-    if (error)
-    {
-        if (error == ssl::error::stream_truncated)
-            BOOST_LOG_TRIVIAL(debug) << "server has closed connection";
-        else
-            BOOST_LOG_TRIVIAL(warning) << "ssl connection has closed ungracefully";
-    }
-
-    get_lowest_layer(stream).close();
-}
-
-auto disconnect_from_gateway(stream_type& stream) -> void
-{
-    secure_disconnect(stream);
-}
-
-auto send_request(stream_type& stream, http::request< http::string_body > const& request) -> nlohmann::json
+auto send_request(qyzk::ohno::stream_type& stream, http::request< http::string_body > const& request) -> nlohmann::json
 {
     error_code error;
     http::write(stream, request, error);
@@ -189,6 +150,46 @@ auto send_request(stream_type& stream, http::request< http::string_body > const&
 
     BOOST_LOG_TRIVIAL(debug) << body.dump(4);
     return body;
+}
+
+auto secure_disconnect(qyzk::ohno::stream_type& stream) -> void
+{
+    error_code error;
+    stream.shutdown(error);
+    if (error)
+    {
+        if (error == ssl::error::stream_truncated)
+            BOOST_LOG_TRIVIAL(debug) << "server has closed connection";
+        else
+            BOOST_LOG_TRIVIAL(warning) << "ssl connection has closed ungracefully";
+    }
+
+    get_lowest_layer(stream).close();
+}
+
+auto get_hostname(std::string const& url)
+{
+    auto const index = url.find("://") + 3;
+    return url.substr(index);
+}
+
+} // namespace
+
+namespace qyzk::ohno
+{
+
+auto resolve(std::string const& hostname, std::string const& service) -> hosts_type
+{
+    io_context context_io;
+    ip::tcp::resolver resolver(context_io);
+    error_code error;
+    auto hosts = resolver.resolve(hostname, service, error);
+    if (error)
+    {
+        BOOST_LOG_TRIVIAL(error) << "failed to resolve host: " << error.message();
+        throw hostname_resolve_error();
+    }
+    return hosts;
 }
 
 auto get_gateway_bot(
@@ -246,17 +247,29 @@ auto connect_to_gateway(
     boost::asio::ssl::context& context_ssl,
     std::string const& url,
     std::string const& option)
-    -> stream_type
+    -> ws_stream_type
 {
-    const auto& hostname = url;
-
-    stream_type stream(context_io, context_ssl);
-    set_sni(stream, hostname);
-
+    const auto hostname = get_hostname(url);
     auto hosts = resolve(hostname, "https");
-    secure_connect(context_io, context_ssl, hostname, hosts);
+
+    ws_stream_type stream(secure_connect(context_io, context_ssl, hostname, hosts));
+
+    try
+    {
+        stream.handshake(hostname, option);
+    }
+    catch (std::exception const& error)
+    {
+        BOOST_LOG_TRIVIAL(error) << "failed to handshake on websocket layer with discord gateway: " << error.what();
+        throw;
+    }
 
     return stream;
+}
+
+auto disconnect_from_gateway(stream_type& stream) -> void
+{
+    secure_disconnect(stream);
 }
 
 } // namespace qyzk::ohno

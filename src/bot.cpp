@@ -98,10 +98,20 @@ auto bot::handle_event(
 {
     if (error)
     {
-        if (error == boost::asio::error::operation_aborted)
+        if (m_is_running)
+        {
+            BOOST_LOG_TRIVIAL(error) << "oh no unexpected connection error: " << error.message();
+            m_is_running = false;
+            m_timer_heartbeat.cancel();
+        }
+        else if (error == boost::asio::error::operation_aborted)
+        {
             BOOST_LOG_TRIVIAL(debug) << "listening event operation has been aborted";
+        }
         else
-            BOOST_LOG_TRIVIAL(error) << "oh no failed to listen gateway event: " << error.message();
+        {
+            BOOST_LOG_TRIVIAL(error) << "error occured while closing connection maybe?: " << error.message();
+        }
         return;
     }
 

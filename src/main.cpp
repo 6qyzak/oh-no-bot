@@ -56,7 +56,9 @@ auto print_config(qyzk::ohno::config const& config)
 auto handle_signal(
     boost::system::error_code const& error,
     int const signal,
-    std::unique_ptr< qyzk::ohno::bot >& bot) -> void
+    std::unique_ptr< qyzk::ohno::bot >& bot,
+    bool& interrupted)
+    -> void
 {
     if (error)
     {
@@ -64,6 +66,7 @@ auto handle_signal(
         return;
     }
 
+    interrupted = true;
     BOOST_LOG_TRIVIAL(debug) << "signal caught, stopping bot";
     bot->stop();
 }
@@ -120,15 +123,8 @@ auto main(
     }
 
     std::unique_ptr< qyzk::ohno::bot > bot_p;
-    try
-    {
-        bot_p.reset(new qyzk::ohno::bot(argv[1], context_io, context_ssl, config, material_bot));
-    }
-    catch (std::exception const& error)
-    {
-        BOOST_LOG_TRIVIAL(error) << "failed to initialize bot: " << error.what();
-        return EXIT_FAILURE;
-    }
+
+    bool interrupted = false;
 
     boost::asio::signal_set signals(context_io, SIGINT, SIGTERM);
     signals.async_wait(
@@ -136,11 +132,24 @@ auto main(
             handle_signal,
             boost::asio::placeholders::error,
             boost::asio::placeholders::signal_number,
-            std::ref(bot_p)));
+            std::ref(bot_p),
+            std::ref(interrupted)));
 
-    auto& bot = *bot_p;
-    bot.async_listen_event();
-    context_io.run();
+    while (!interrupted)
+    {
+        try
+        {
+            bot_p.reset(new qyzk::ohno::bot(argv[1], context_io, context_ssl, config, material_bot));
+        }
+        catch (std::exception const& error)
+        {
+            BOOST_LOG_TRIVIAL(error) << "failed to initialize bot: " << error.what();
+            return EXIT_FAILURE;
+        }
+
+        bot_p->async_listen_event();
+        context_io.run();
+    }
 
     return EXIT_SUCCESS;
 }

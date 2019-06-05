@@ -1,0 +1,11 @@
+[Unit]
+Description=oh no bot
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/jake/project/oh-no-bot/build/oh_no_bot /home/jake/project/oh-no-bot/config.json
+
+[Install]
+WantedBy=multi-user.target

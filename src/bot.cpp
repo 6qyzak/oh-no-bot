@@ -36,20 +36,6 @@ auto is_dohyeon(std::string const& id) -> bool
     return id == "305519394656878595"; // yeeees
 }
 
-auto has_magic_word(std::string const& content) -> bool
-{
-    if (content.empty())
-        return false;
-
-    std::vector<char> content_buffer;
-    content_buffer.reserve(content.size() + 1);
-    for (auto const c : content)
-        content_buffer.emplace_back(std::tolower(c));
-    content_buffer.emplace_back('\0');
-    std::string content_string(content_buffer.data());
-    return content_string.find("mod") != std::string::npos && content_string.find("gay") != std::string::npos;
-}
-
 } // namespace
 
 namespace qyzk::ohno
@@ -320,17 +306,6 @@ auto bot::handle_message_create(json const& payload) -> void
     else if (id == "257451263820562433" && content == "oh no")
     {
         send_message(m_config, m_hosts_http, channel, "oh no");
-    }
-
-    else if (has_magic_word(content))
-    {
-        // oh no time for punishment
-        std::string const& username = data["author"]["username"];
-        auto const& guild = data["guild_id"];
-        auto message = "removed " + username + " from server because he confessed he's gay :joy:";
-        send_message(m_config, m_hosts_http, channel, message);
-        kick(m_config, m_hosts_http, guild, id);
-        delete_message(m_config, m_hosts_http, channel, data["id"]);
     }
 }
 

@@ -297,7 +297,7 @@ auto bot::handle_message_create(json const& payload) -> void
     std::string const& content = data["content"];
     std::string const& channel = data["channel_id"];
 
-    if (is_dohyeon(id) && chrono::system_clock::now() - m_timer_ko3 >= chrono::seconds(30))
+    if (is_dohyeon(id) && chrono::system_clock::now() - m_timer_ko3 >= chrono::minutes(30))
     {
         m_timer_ko3 = chrono::system_clock::now();
         send_message(m_config, m_hosts_http, channel, "으아아악 고3이다");
